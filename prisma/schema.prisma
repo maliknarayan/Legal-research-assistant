@@ -1,0 +1,121 @@
+// Prisma schema for the Indian Legal Research Assistant (MVP)
+// SQLite for MVP; swap datasource provider to postgresql later without model changes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// A single research session groups every step of the workflow.
+model Research {
+  id        String   @id @default(cuid())
+  title     String   @default("Untitled research")
+  status    String   @default("draft") // draft | in_progress | complete
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  caseFacts       CaseFacts?
+  lawResults      LawResult[]
+  precedents      Precedent[]
+  analysis        Analysis?
+  arguments       Argument[]
+  recommendations Recommendation[]
+}
+
+// Step 1 — the user's raw case input (auto-saved as a draft).
+model CaseFacts {
+  id           String   @id @default(cuid())
+  researchId   String   @unique
+  research     Research @relation(fields: [researchId], references: [id], onDelete: Cascade)
+  facts        String   @default("")
+  timeline     String   @default("")
+  parties      String   @default("")
+  reliefSought String   @default("")
+  updatedAt    DateTime @updatedAt
+}
+
+// Step 2 — applicable Indian Acts and sections identified by AI.
+model LawResult {
+  id          String   @id @default(cuid())
+  researchId  String
+  research    Research @relation(fields: [researchId], references: [id], onDelete: Cascade)
+  act         String
+  section     String
+  explanation String   @default("")
+  reason      String   @default("")
+  verified    Boolean  @default(false) // true only when confirmed against a known source
+  // Provenance — every row must trace back to a corpus passage.
+  sourceDocId     String @default("")
+  sourcePassageId String @default("")
+  quote           String @default("")
+  sourceUrl       String @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([researchId])
+}
+
+// Step 3 — reference judgments. Never treated as fact unless verificationStatus = "verified".
+model Precedent {
+  id                 String   @id @default(cuid())
+  researchId         String
+  research           Research @relation(fields: [researchId], references: [id], onDelete: Cascade)
+  caseName           String
+  court              String   @default("")
+  citation           String   @default("")
+  year               String   @default("")
+  legalPrinciple     String   @default("")
+  relevance          String   @default("")
+  similarityScore    Float    @default(0)
+  verificationStatus String   @default("unverified") // sourced | unverified
+  sourceUrl          String   @default("")
+  sourceDocId        String   @default("")
+  sourcePassageId    String   @default("")
+  quote              String   @default("")
+  createdAt          DateTime @default(now())
+
+  @@index([researchId])
+}
+
+// Step 4 — structured legal analysis. Sections stored as markdown text.
+model Analysis {
+  id            String   @id @default(cuid())
+  researchId    String   @unique
+  research      Research @relation(fields: [researchId], references: [id], onDelete: Cascade)
+  issues        String   @default("")
+  applicableLaw String   @default("")
+  strengths     String   @default("")
+  weaknesses    String   @default("")
+  missingFacts  String   @default("")
+  updatedAt     DateTime @updatedAt
+}
+
+// Step 5 — arguments for the applicant and anticipated counter-arguments.
+model Argument {
+  id            String   @id @default(cuid())
+  researchId    String
+  research      Research @relation(fields: [researchId], references: [id], onDelete: Cascade)
+  side            String // applicant | counter
+  content         String   @default("")
+  supportingLaw   String   @default("")
+  sourcePassageId String   @default("")
+  createdAt       DateTime @default(now())
+
+  @@index([researchId])
+}
+
+// Step 6 — recommended procedural next steps.
+model Recommendation {
+  id         String   @id @default(cuid())
+  researchId String
+  research   Research @relation(fields: [researchId], references: [id], onDelete: Cascade)
+  action     String
+  reason     String   @default("")
+  priority   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([researchId])
+}
